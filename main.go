@@ -1,54 +1,60 @@
+/*
+Creating a channel of strings to use insted of a state machine.
+The goroutine (go func() {}()) contains the logic now, but it sends one at a time to the channel.
+*/
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 )
 
-func main() {
-	file, err := os.Open("messages.txt")
-	if err != nil {
-		fmt.Println("Error opening file:", err)
-		return
-	}
-	defer file.Close()
+func getLinesChannel(f io.ReadCloser) <-chan string {
+	ch := make(chan string)
 
-	var current_line_contents string = ""
+	go func() {
+		defer f.Close()
+		defer close(ch)
 
-	for {
-		buffer := make([]byte, 8)
-		n, err := file.Read(buffer)
+		var current_line_contents string = ""
 
-		chunk := string(buffer[:n])
-		parts := strings.Split(chunk, "\n")
+		for {
+			buffer := make([]byte, 8)
+			n, err := f.Read(buffer)
 
-		if err != nil {
-			if current_line_contents != "" {
-				fmt.Printf("read: %s\n", current_line_contents)
-				current_line_contents = ""
+			if n > 0 {
+				chunk := string(buffer[:n])
+				parts := strings.Split(chunk, "\n")
+
+				for i := 0; i < len(parts)-1; i++ {
+					frase := current_line_contents + parts[i]
+					ch <- frase
+					current_line_contents = ""
+				}
+				current_line_contents = current_line_contents + parts[len(parts)-1]
 			}
-			if errors.Is(err, io.EOF) {
+
+			if err != nil {
 				break
 			}
-			fmt.Printf("error: %s\n", err.Error())
-			break
 		}
-		for i := 0; i < len(parts)-1; i++ {
-			frase := current_line_contents + parts[i]
-			fmt.Printf("read: %s", frase)
-			current_line_contents = ""
-		}
-		current_line_contents = current_line_contents + parts[len(parts)-1]
 
-		if err == io.EOF {
-			break
+		if current_line_contents != "" {
+			ch <- current_line_contents
 		}
-	}
-	if current_line_contents != "" {
-		fmt.Printf("read: %s\n", current_line_contents)
-	}
+	}()
 
+	return ch
+}
+
+func main() {
+	file, _ := os.Open("messages.txt")
+
+	lines := getLinesChannel(file)
+
+	for line := range lines {
+		fmt.Printf("read: %s\n", line)
+	}
 }
