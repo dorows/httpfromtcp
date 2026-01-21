@@ -1,13 +1,13 @@
 /*
-Creating a channel of strings to use insted of a state machine.
-The goroutine (go func() {}()) contains the logic now, but it sends one at a time to the channel.
+read lines from a TCP connection.
 */
 package main
 
 import (
 	"fmt"
 	"io"
-	"os"
+	"log"
+	"net"
 	"strings"
 )
 
@@ -50,11 +50,26 @@ func getLinesChannel(f io.ReadCloser) <-chan string {
 }
 
 func main() {
-	file, _ := os.Open("messages.txt")
+	listener, err := net.Listen("tcp", ":42069")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer listener.Close()
 
-	lines := getLinesChannel(file)
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			continue
+		}
 
-	for line := range lines {
-		fmt.Printf("read: %s\n", line)
+		fmt.Println("connection has been accepted")
+
+		lines := getLinesChannel(conn)
+
+		for line := range lines {
+			fmt.Println(line)
+		}
+
+		fmt.Println("connection has been closed")
 	}
 }
